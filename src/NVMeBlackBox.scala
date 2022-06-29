@@ -25,7 +25,7 @@ class NVMeBlackBox (
     "MAX_SQ_INTERVAL"   -> MAX_SQ_INTERVAL,
     "USED_QUEUE_MAX_ID" -> QUEUE_MAX_ID
 )) {
-    val QUEUE_NUM = (SSD_MAX_ID+1) * (QUEUE_MAX_ID+1) - 1
+    val QUEUE_NUM = (SSD_MAX_ID+1) * (QUEUE_MAX_ID+1)
 
     val io = IO(new Bundle{
         val clk_core    = Input(Clock())
