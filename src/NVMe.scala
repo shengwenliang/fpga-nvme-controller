@@ -16,17 +16,14 @@ class NVMe (
     MAX_SQ_INTERVAL     : Int = 30
 ) extends Module {
     val io = IO(new Bundle{
-		val h2cCmd		= Decoupled(new H2C_CMD)
-		val h2cData	    = Flipped(Decoupled(new H2C_DATA))
-		val c2hCmd		= Decoupled(new C2H_CMD)
-		val c2hData	    = Decoupled(new C2H_DATA)
-
         val ssdCmd      = Flipped(Vec(SSD_MAX_ID+1, Vec(QUEUE_MAX_ID+1, Decoupled(new NVMeCommand))))
 
         val regControl  = new NVMeControl
         val regStatus   = new NVMeStatus
 
         val bramReq     = Flipped(new NVMeBRAM)
+
+        val s_axib      = new AXIB_SLAVE
 
         val pcie_hbm_write_transfer = if (DEBUG) {Some(Input(UInt(2.W)))} else None
     })
@@ -78,56 +75,6 @@ class NVMe (
     nvmeCore.io.control_band_tr_en      := io.regControl.band_tr_en     
     nvmeCore.io.control_band_tr_read    := io.regControl.band_tr_read   
 
-    io.h2cCmd.bits.addr     := nvmeCore.io.dma_h2c_cmd_addr        
-    io.h2cCmd.bits.len      := nvmeCore.io.dma_h2c_cmd_len         
-    io.h2cCmd.bits.eop      := nvmeCore.io.dma_h2c_cmd_eop         
-    io.h2cCmd.bits.sop      := nvmeCore.io.dma_h2c_cmd_sop         
-    io.h2cCmd.bits.mrkr_req := nvmeCore.io.dma_h2c_cmd_mrkr_req    
-    io.h2cCmd.bits.sdi      := nvmeCore.io.dma_h2c_cmd_sdi         
-    io.h2cCmd.bits.qid      := nvmeCore.io.dma_h2c_cmd_qid         
-    io.h2cCmd.bits.error    := nvmeCore.io.dma_h2c_cmd_error       
-    io.h2cCmd.bits.func     := nvmeCore.io.dma_h2c_cmd_func        
-    io.h2cCmd.bits.cidx     := nvmeCore.io.dma_h2c_cmd_cidx        
-    io.h2cCmd.bits.port_id  := nvmeCore.io.dma_h2c_cmd_port_id     
-    io.h2cCmd.bits.no_dma   := nvmeCore.io.dma_h2c_cmd_no_dma      
-    io.h2cCmd.valid         := nvmeCore.io.dma_h2c_cmd_valid       
-    nvmeCore.io.dma_h2c_cmd_ready   := io.h2cCmd.ready
-
-    nvmeCore.io.dma_h2c_data_data               := io.h2cData.bits.data           
-    nvmeCore.io.dma_h2c_data_tcrc               := io.h2cData.bits.tcrc           
-    nvmeCore.io.dma_h2c_data_tuser_qid          := io.h2cData.bits.tuser_qid      
-    nvmeCore.io.dma_h2c_data_tuser_port_id      := io.h2cData.bits.tuser_port_id  
-    nvmeCore.io.dma_h2c_data_tuser_err          := io.h2cData.bits.tuser_err      
-    nvmeCore.io.dma_h2c_data_tuser_mdata        := io.h2cData.bits.tuser_mdata    
-    nvmeCore.io.dma_h2c_data_tuser_mty          := io.h2cData.bits.tuser_mty      
-    nvmeCore.io.dma_h2c_data_tuser_zero_byte    := io.h2cData.bits.tuser_zero_byte
-    nvmeCore.io.dma_h2c_data_last               := io.h2cData.bits.last           
-    nvmeCore.io.dma_h2c_data_valid              := io.h2cData.valid          
-    io.h2cData.ready    := nvmeCore.io.dma_h2c_data_ready
-
-    io.c2hCmd.bits.addr     := nvmeCore.io.dma_c2h_cmd_addr    
-    io.c2hCmd.bits.qid      := nvmeCore.io.dma_c2h_cmd_qid     
-    io.c2hCmd.bits.error    := nvmeCore.io.dma_c2h_cmd_error   
-    io.c2hCmd.bits.func     := nvmeCore.io.dma_c2h_cmd_func    
-    io.c2hCmd.bits.port_id  := nvmeCore.io.dma_c2h_cmd_port_id 
-    io.c2hCmd.bits.pfch_tag := nvmeCore.io.dma_c2h_cmd_pfch_tag
-    io.c2hCmd.bits.len      := nvmeCore.io.dma_c2h_cmd_len     
-    io.c2hCmd.valid         := nvmeCore.io.dma_c2h_cmd_valid   
-    nvmeCore.io.dma_c2h_cmd_ready   := io.c2hCmd.ready
-
-    io.c2hData.bits.data            := nvmeCore.io.dma_c2h_data_data         
-    io.c2hData.bits.tcrc            := nvmeCore.io.dma_c2h_data_tcrc         
-    io.c2hData.bits.ctrl_marker     := nvmeCore.io.dma_c2h_data_ctrl_marker  
-    io.c2hData.bits.ctrl_ecc        := nvmeCore.io.dma_c2h_data_ctrl_ecc     
-    io.c2hData.bits.ctrl_len        := nvmeCore.io.dma_c2h_data_ctrl_len     
-    io.c2hData.bits.ctrl_port_id    := nvmeCore.io.dma_c2h_data_ctrl_port_id 
-    io.c2hData.bits.ctrl_qid        := nvmeCore.io.dma_c2h_data_ctrl_qid     
-    io.c2hData.bits.ctrl_has_cmpt   := nvmeCore.io.dma_c2h_data_ctrl_has_cmpt
-    io.c2hData.bits.last            := nvmeCore.io.dma_c2h_data_last         
-    io.c2hData.bits.mty             := nvmeCore.io.dma_c2h_data_mty          
-    io.c2hData.valid                := nvmeCore.io.dma_c2h_data_valid        
-    nvmeCore.io.dma_c2h_data_ready  := io.c2hData.ready      
-
     nvmeCore.io.axib_read_enable    := io.bramReq.readEnable
     nvmeCore.io.axib_read_addr      := io.bramReq.readAddr  
     io.bramReq.readData             := nvmeCore.io.axib_read_data
@@ -135,6 +82,44 @@ class NVMe (
     nvmeCore.io.axib_write_addr     := io.bramReq.writeAddr 
     nvmeCore.io.axib_write_data     := io.bramReq.writeData 
 
+    io.s_axib.qdma_init()
+
+    nvmeCore.io.s_axib_awid			<> io.s_axib.aw.bits.id
+	nvmeCore.io.s_axib_awaddr		<> io.s_axib.aw.bits.addr
+	nvmeCore.io.s_axib_awlen		<> io.s_axib.aw.bits.len
+	nvmeCore.io.s_axib_awsize		<> io.s_axib.aw.bits.size
+	nvmeCore.io.s_axib_awuser		<> io.s_axib.aw.bits.user
+	nvmeCore.io.s_axib_awburst		<> io.s_axib.aw.bits.burst
+	nvmeCore.io.s_axib_awregion 	<> io.s_axib.aw.bits.region
+	nvmeCore.io.s_axib_awvalid		<> io.s_axib.aw.valid
+	nvmeCore.io.s_axib_awready		<> io.s_axib.aw.ready
+	nvmeCore.io.s_axib_wdata		<> io.s_axib.w.bits.data
+	nvmeCore.io.s_axib_wstrb		<> io.s_axib.w.bits.strb
+	nvmeCore.io.s_axib_wlast		<> io.s_axib.w.bits.last
+	nvmeCore.io.s_axib_wuser		<> io.s_axib.w.bits.user
+	nvmeCore.io.s_axib_wvalid		<> io.s_axib.w.valid
+	nvmeCore.io.s_axib_wready		<> io.s_axib.w.ready
+	nvmeCore.io.s_axib_bid			<> io.s_axib.b.bits.id
+	nvmeCore.io.s_axib_bresp		<> io.s_axib.b.bits.resp
+	nvmeCore.io.s_axib_bvalid		<> io.s_axib.b.valid
+	nvmeCore.io.s_axib_bready		<> io.s_axib.b.ready
+	nvmeCore.io.s_axib_arid			<> io.s_axib.ar.bits.id
+	nvmeCore.io.s_axib_araddr		<> io.s_axib.ar.bits.addr
+	nvmeCore.io.s_axib_arlen		<> io.s_axib.ar.bits.len
+	nvmeCore.io.s_axib_arsize		<> io.s_axib.ar.bits.size
+	nvmeCore.io.s_axib_aruser		<> io.s_axib.ar.bits.user
+	nvmeCore.io.s_axib_arburst		<> io.s_axib.ar.bits.burst
+	nvmeCore.io.s_axib_arregion 	<> io.s_axib.ar.bits.region
+	nvmeCore.io.s_axib_arvalid		<> io.s_axib.ar.valid
+	nvmeCore.io.s_axib_arready		<> io.s_axib.ar.ready
+	nvmeCore.io.s_axib_rid			<> io.s_axib.r.bits.id
+	nvmeCore.io.s_axib_rdata		<> io.s_axib.r.bits.data
+	nvmeCore.io.s_axib_ruser		<> io.s_axib.r.bits.user
+	nvmeCore.io.s_axib_rresp		<> io.s_axib.r.bits.resp
+	nvmeCore.io.s_axib_rlast		<> io.s_axib.r.bits.last
+	nvmeCore.io.s_axib_rvalid		<> io.s_axib.r.valid
+	nvmeCore.io.s_axib_rready		<> io.s_axib.r.ready
+    
     if (DEBUG) {
         nvmeCore.io.pcie_hbm_write_transfer := io.pcie_hbm_write_transfer.get
     } else {
