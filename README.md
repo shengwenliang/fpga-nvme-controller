@@ -1,8 +1,23 @@
 # Chisel NVMe Host Controller
 NVMe host controller written in Chisel.
 
+## Table of contents
+- [Chisel NVMe Host Controller](#chisel-nvme-host-controller)
+  - [Table of contents](#table-of-contents)
+  - [How to Add this Module in Your Chisel Project:](#how-to-add-this-module-in-your-chisel-project)
+  - [NVMeCore Module](#nvmecore-module)
+    - [Parameter Description](#parameter-description)
+    - [Port Description](#port-description)
+      - [NVMeCoreControl](#nvmecorecontrol)
+      - [NVMeCoreStatus](#nvmecorestatus)
+  - [Other Modules and APIs](#other-modules-and-apis)
+    - [AXI2NVMeRam](#axi2nvmeram)
+    - [NVMe Command Builders](#nvme-command-builders)
+    - [BandwidthProbe](#bandwidthprobe)
+  - [Example Design](#example-design)
+
 ## How to Add this Module in Your Chisel Project:
-QDMA is this module's dependency. Before using this module, make sure QDMA module are installed.  
+[QDMA](https://github.com/carlzhang4/qdma) is this module's dependency. Before using this module, make sure QDMA module are installed.  
 To install this module, use the command below:  
 ```bash
 $ git submodule add git@github.com:JewdrunAleph/fpga-nvme-controller nvme
@@ -35,10 +50,9 @@ $ git clone git@github.com:JewdrunAleph/fpga-nvme-controller nvme
 
 #### NVMeCoreControl
 NVMe control signals are listed here.
-##### enable
+**enable**  
 Only when this signal is high will this module work and accept new commands. When this signal is low, it still processes existing commands, but won't accept new commands anymore. Designed for benchmarking.
-
-##### ssdSetup
+**ssdSetup**  
 Initialize an SSD with data required by this module. It has two signals:  
 - `ssdId`: Index of SSD to be initialized.  
 - `ssdBarAddr`: **Physical** address of BAR 0 of this SSD. It should be got from the host.
@@ -65,4 +79,9 @@ For simplicity, NVMe core module takes `NVMeRamIO` as input, which is similar to
 `BandwidthProbe` helps to record actual data transfer bandwidth of certain interface.
 
 ## Example Design
-This repo provides an example benchmark design includes hardware design and corresponding software. Details to be updated.
+This repo provides an example benchmark design includes hardware design and corresponding software. Example design is tested on an Alveo U50 Card. For U280 board, please use your own xdc file.  
+To test this design:  
+1. Install [QDMA driver and LibQDMA](https://github.com/carlzhang4/qdma_improve).
+2. Generate bitstream file, and program to FPGA.
+3. Use Makefile to generate executable.
+4. Reboot your computer and run.
