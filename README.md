@@ -49,9 +49,9 @@ $ git clone git@github.com:JewdrunAleph/fpga-nvme-controller nvme
 |c2hData    |Option[DecoupledIO[C2H_DATA]]|Output   |Used when `QDMA_INTERFACE == "DMA"`. Connect to QDMA's C2H data port.|
 
 #### NVMeCoreControl
-NVMe control signals are listed here.
+NVMe control signals are listed here.  
 **enable**  
-Only when this signal is high will this module work and accept new commands. When this signal is low, it still processes existing commands, but won't accept new commands anymore. Designed for benchmarking.
+Only when this signal is high will this module work and accept new commands. When this signal is low, it still processes existing commands, but won't accept new commands anymore. Designed for benchmarking.  
 **ssdSetup**  
 Initialize an SSD with data required by this module. It has two signals:  
 - `ssdId`: Index of SSD to be initialized.  
