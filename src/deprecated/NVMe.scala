@@ -1,7 +1,8 @@
-package nvme
+package nvme.deprecated
 
 import chisel3._
 import chisel3.util._
+import nvme.NVMeRamIO
 
 import qdma._
 
@@ -21,7 +22,7 @@ class NVMe (
         val regControl  = new NVMeControl
         val regStatus   = new NVMeStatus
 
-        val bramReq     = Flipped(new NVMeBRAM)
+        val bramReq     = Flipped(new NVMeRamIO)
 
         val s_axib      = new AXIB_SLAVE
 

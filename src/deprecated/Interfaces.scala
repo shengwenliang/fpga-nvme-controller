@@ -1,4 +1,4 @@
-package nvme
+package nvme.deprecated
 
 import chisel3._
 import chisel3.util._
@@ -12,15 +12,6 @@ class NVMeCommand extends Bundle{
     val numLb       = Output(UInt(16.W))
     val ssdAddr     = Output(UInt(64.W))
     val memAddr     = Output(UInt(64.W))
-}
-
-class NVMeBRAM extends Bundle{
-    val readEnable  = Output(UInt(1.W))
-    val readAddr    = Output(UInt(64.W))
-    val readData    = Input(UInt(512.W))
-    val writeMask   = Output(UInt(64.W))
-    val writeAddr   = Output(UInt(64.W))
-    val writeData   = Output(UInt(512.W))
 }
 
 class NVMeControl extends Bundle {
