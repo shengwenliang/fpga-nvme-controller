@@ -44,7 +44,7 @@ class NVMeBenchmarkTop extends RawModule{
 	Collector.connect_to_status_reg(qdma.io.reg_status, 400)
 
 	withClockAndReset(qdma.io.user_clk,!qdma.io.user_arstn) {
-    	val nvmeCore = Module(new NVMeCore(
+    	val nvmeCore = Module(new NVMeController(
 			SSD_NUM 		= SSD_NUM, 
 			QUEUE_NUM 		= QUEUE_NUM, 
 			QUEUE_DEPTH 	= QUEUE_DEPTH,

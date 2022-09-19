@@ -47,3 +47,8 @@ class NVMeCoreStatus extends Bundle {
     val params          = new NVMeParameters
     val stat            = new NVMeStat
 }
+
+class SSDCompletion extends Bundle {
+    val cmdId   = Output(UInt(16.W))
+    val status  = Output(UInt(8.W))
+}
