@@ -37,9 +37,9 @@ object NVMeCommandSet {
             // DW 11-10:
             slbaSig,    // Starting LB address
             // DW 9-8:
-            prp2,       // PRP 2
+            prp2Sig,       // PRP 2
             // DW 7-6
-            prp1,       // PRP 1
+            prp1Sig,       // PRP 1
             // DW 5-4:
             0.U(64.W),  // Metadata ptr, not used here
             // DW 3-2:
@@ -47,7 +47,7 @@ object NVMeCommandSet {
             // DW 1:
             1.U(32.W),  // Namespace, typically 1 for most cases
             // DW 0:
-            id,         // Command ID
+            idSig,         // Command ID
             0.U(2.W),   // Use PRP
             0.U(4.W),   // Rsvd
             0.U(2.W),   // Fuse command
@@ -88,9 +88,9 @@ object NVMeCommandSet {
             // DW 11-10:
             slbaSig,    // Starting LB address
             // DW 9-8:
-            prp2,       // PRP 2
+            prp2Sig,       // PRP 2
             // DW 7-6
-            prp1,       // PRP 1
+            prp1Sig,       // PRP 1
             // DW 5-4:
             0.U(64.W),  // Metadata ptr, not used here
             // DW 3-2:
@@ -98,7 +98,7 @@ object NVMeCommandSet {
             // DW 1:
             1.U(32.W),  // Namespace, typically 1 for most cases
             // DW 0:
-            id,         // Command ID
+            idSig,         // Command ID
             0.U(2.W),   // Use PRP
             0.U(4.W),   // Rsvd
             0.U(2.W),   // Fuse command

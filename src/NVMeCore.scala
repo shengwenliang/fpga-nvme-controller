@@ -27,7 +27,7 @@ class NVMeController (
     val io = IO(new Bundle{
         // SSD input commands.
         val ssdCmd      = Flipped(Vec(SSD_NUM, Vec(QUEUE_NUM, Decoupled(UInt(512.W)))))
-        val ssdComp     = Vec(SSD_NUM, Vec(QUEUE_NUM, Valid(new SSDCompletion)))
+        val ssdCmpt     = Vec(SSD_NUM, Vec(QUEUE_NUM, Valid(new SSDCompletion)))
 
         val control     = Flipped(new NVMeCoreControl)
         val status      = new NVMeCoreStatus
@@ -373,7 +373,7 @@ class NVMeController (
 
     for (ssdId <- 0 until SSD_NUM) {
         for (queueId <- 0 until QUEUE_NUM) {
-            dbAbt.io.in(ssdId*QUEUE_NUM + queueId) <> RegSlice(2)(dbReq(ssdId)(queueId))
+            dbAbt.io.in(ssdId*QUEUE_NUM + queueId) <> RegSlice(5)(dbReq(ssdId)(queueId))
         }
     }
 
@@ -658,8 +658,8 @@ class NVMeController (
     // SSD completion signals 
     for (ssdId <- 0 until SSD_NUM) {
         for (queueId <- 0 until QUEUE_NUM) {
-            io.ssdComp(ssdId)(queueId).valid := 0.U
-            ToZero(io.ssdComp(ssdId)(queueId).bits)
+            io.ssdCmpt(ssdId)(queueId).valid := 0.U
+            ToZero(io.ssdCmpt(ssdId)(queueId).bits)
         }
     }
     when (
@@ -670,21 +670,21 @@ class NVMeController (
         val ssdId = if (SSD_HIGH_BIT >= SSD_LOW_BIT) {io.ramIO.writeAddr(SSD_HIGH_BIT, SSD_LOW_BIT)} else 0.U
         val queueId = if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT) {io.ramIO.writeAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT)} else 0.U
         when (io.ramIO.writeMask === "h000000000000ffff".U) {
-            io.ssdComp(ssdId)(queueId).valid        := 1.U
-            io.ssdComp(ssdId)(queueId).bits.cmdId   := io.ramIO.writeData(111, 96)
-            io.ssdComp(ssdId)(queueId).bits.status  := io.ramIO.writeData(120, 113)
+            io.ssdCmpt(ssdId)(queueId).valid        := 1.U
+            io.ssdCmpt(ssdId)(queueId).bits.cmdId   := io.ramIO.writeData(111, 96)
+            io.ssdCmpt(ssdId)(queueId).bits.status  := io.ramIO.writeData(120, 113)
         }.elsewhen (io.ramIO.writeMask === "h00000000ffff0000".U) {
-            io.ssdComp(ssdId)(queueId).valid        := 1.U
-            io.ssdComp(ssdId)(queueId).bits.cmdId   := io.ramIO.writeData(239, 224)
-            io.ssdComp(ssdId)(queueId).bits.status  := io.ramIO.writeData(248, 241)
+            io.ssdCmpt(ssdId)(queueId).valid        := 1.U
+            io.ssdCmpt(ssdId)(queueId).bits.cmdId   := io.ramIO.writeData(239, 224)
+            io.ssdCmpt(ssdId)(queueId).bits.status  := io.ramIO.writeData(248, 241)
         }.elsewhen (io.ramIO.writeMask === "h0000ffff00000000".U) {
-            io.ssdComp(ssdId)(queueId).valid        := 1.U
-            io.ssdComp(ssdId)(queueId).bits.cmdId   := io.ramIO.writeData(367, 352)
-            io.ssdComp(ssdId)(queueId).bits.status  := io.ramIO.writeData(376, 369)
+            io.ssdCmpt(ssdId)(queueId).valid        := 1.U
+            io.ssdCmpt(ssdId)(queueId).bits.cmdId   := io.ramIO.writeData(367, 352)
+            io.ssdCmpt(ssdId)(queueId).bits.status  := io.ramIO.writeData(376, 369)
         }.elsewhen (io.ramIO.writeMask === "hffff000000000000".U) {
-            io.ssdComp(ssdId)(queueId).valid        := 1.U
-            io.ssdComp(ssdId)(queueId).bits.cmdId   := io.ramIO.writeData(495, 480)
-            io.ssdComp(ssdId)(queueId).bits.status  := io.ramIO.writeData(504, 497)
+            io.ssdCmpt(ssdId)(queueId).valid        := 1.U
+            io.ssdCmpt(ssdId)(queueId).bits.cmdId   := io.ramIO.writeData(495, 480)
+            io.ssdCmpt(ssdId)(queueId).bits.status  := io.ramIO.writeData(504, 497)
         }
     }
 }

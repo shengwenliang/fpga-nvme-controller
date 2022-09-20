@@ -41,21 +41,24 @@ object AXI2NVMeRam {
         val wrRemainBeat    = (wrSt === sWrData) && io.in.w.fire
 
         val backFifo    = XQueue(UInt(ID_WIDTH.W), 32)
+        val backFifoIn  = Wire(Decoupled(UInt(ID_WIDTH.W)))
+
+        backFifo.io.in  <> RegSlice(2)(backFifoIn)
 
         io.out.writeMask    := Mux(io.in.w.fire, io.in.w.bits.strb, 0.U)
         io.out.writeAddr    := Mux(wrFirstBeat, Cat(io.in.aw.bits.addr(63, 6), 0.U(6.W)), rNextWrAddr)
         io.out.writeData    := io.in.w.bits.data
 
         io.in.aw.ready      := (wrSt === sWrReq)
-        io.in.w.ready       := backFifo.io.in.ready
+        io.in.w.ready       := backFifoIn.ready
         io.in.b.bits.id     := backFifo.io.out.bits
         io.in.b.bits.resp   := 0.U
         io.in.b.bits.user   := 0.U
         io.in.b.valid       := backFifo.io.out.valid
         backFifo.io.out.ready   := io.in.b.ready
 
-        backFifo.io.in.valid    := io.in.w.fire && io.in.w.bits.last.asBool
-        backFifo.io.in.bits     := rWid
+        backFifoIn.valid    := io.in.w.fire && io.in.w.bits.last.asBool
+        backFifoIn.bits     := rWid
 
         switch (wrSt) {
             is (sWrReq) {
