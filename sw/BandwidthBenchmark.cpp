@@ -23,6 +23,8 @@ using namespace std;
 
 // Change this as you like. Zero's based.
 #define ADMIN_QUEUE_DEPTH 0x1f
+// List of devices.
+string pci_id[] = {"e3", "36", "38", "39", "3a", "3b", "3c", "3d"};
 
 // Functions for the CPU to create admin and I/O queues.
 uint16_t command_id[32];
@@ -296,7 +298,7 @@ int main(int argc, char *argv[])
     fprintf(stdout, "Prefetch tag: %d\n", pfch_tag);
 
     // Physical addresses of several BARs.
-    uint64_t nvme_base[4], bypass_base;
+    uint64_t nvme_base[32], bypass_base;
     
     FILE *fp;
 
@@ -353,7 +355,6 @@ int main(int argc, char *argv[])
     }
 
     // Open SSD device, now I just assume it is BAR 0 of target
-    string pci_id[8] = {"e3", "36", "38", "39", "3a", "3b", "3c", "3d"};
 
     uint64_t device_low_addr = 0, device_high_addr = 0;
 
@@ -618,7 +619,7 @@ int main(int argc, char *argv[])
         int mode, num_lb, benchmark_time;
         int benchmark_stuck = 0;
 
-        fprintf(stdout, "Enter mode. +1 for write, +2 for random, +4 for mixed, +1024 for record: ");
+        fprintf(stdout, "Enter mode. +1 for write, +2 for random, +1024 for record: ");
         fscanf(stdin, "%d", &mode);
         fprintf(stdout, "Enter number of logical blocks (512 B) for each cmd: ");
         fscanf(stdin, "%d", &num_lb);

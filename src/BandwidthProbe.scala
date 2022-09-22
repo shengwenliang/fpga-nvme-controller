@@ -5,6 +5,7 @@ import chisel3.experimental.ChiselEnum
 import common.axi._
 import common.storage._
 import common._
+import math.ceil
 
 class BandwidthProbe (
     CYCLE       : Int = 25000000,
@@ -41,8 +42,21 @@ class BandwidthProbe (
         }
     }
 
-    val q = XQueue(UInt(32.W), DEPTH)
-    q.io.out <> io.count
-    q.io.in.valid   := record_valid
-    q.io.in.bits    := band_cnt
+    val FIFO_CNT = ceil(DEPTH / 4096).toInt
+
+    if (FIFO_CNT == 0) {
+        val q = XQueue(UInt(32.W), DEPTH)
+        q.io.out        <> io.count
+        q.io.in.valid   := record_valid
+        q.io.in.bits    := band_cnt
+    } else {
+        val q = XQueue(FIFO_CNT)(UInt(32.W), 4096)
+        q(0).io.in.valid        := record_valid
+        q(0).io.in.bits         := band_cnt
+        q(FIFO_CNT-1).io.out    <> io.count
+        for (i <- 1 until FIFO_CNT) {
+            q(i-1).io.out       <> q(i).io.in
+        }
+    }
+
 }

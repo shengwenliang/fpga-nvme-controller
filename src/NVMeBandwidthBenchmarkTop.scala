@@ -7,7 +7,7 @@ import common.storage._
 import common.axi._
 import qdma._
 
-class NVMeBenchmarkTop extends RawModule{
+class NVMeBandwidthBenchmarkTop extends RawModule{
 	val qdma_pin		= IO(new QDMAPin(PCIE_WIDTH=8))
 	val led 			= IO(Output(UInt(1.W)))
 
@@ -103,7 +103,7 @@ class NVMeBenchmarkTop extends RawModule{
 
 		// Benchmark module
 
-		val benchmark = Module(new NVMeBenchmark(
+		val benchmark = Module(new NVMeBandwidthBenchmark(
 			SSD_NUM				= SSD_NUM,
 			QUEUE_NUM			= QUEUE_NUM,
 			DATA_BUFFER_SHIFT	= DATA_BUFFER_SHIFT
@@ -151,16 +151,6 @@ class NVMeBenchmarkTop extends RawModule{
 		writeProbe.io.fire			:= (dataBufferIo.writeMask =/= 0.U)
 		writeProbe.io.count.ready	:= (controlReg(166)(0) === 1.U && RegNext(controlReg(166)(0)) =/= 1.U)
 		statusReg(217)	:= Mux(writeProbe.io.count.valid, writeProbe.io.count.bits, -1.S(32.W).asUInt)
-		class ila_debug(seq:Seq[Data]) extends BaseILA(seq)
-		val instIlaDbg = Module(new ila_debug(Seq(	
-			readProbe.io,
-			statusReg(192),
-			controlReg(165),
-			controlReg(166),
-			statusReg(216),
-			nvmeCore.io.sAxib.get
-		)))
-		instIlaDbg.connect(qdma.io.user_clk)
 
 		// AXIB Debug
 		val aw_cnt  = RegInit(UInt(32.W), 0.U)

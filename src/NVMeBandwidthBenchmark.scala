@@ -9,7 +9,7 @@ import math.max
 
 // Runs a simple NVMe benchmark.
 
-class NVMeBenchmark (
+class NVMeBandwidthBenchmark (
     SSD_NUM             : Int,
     QUEUE_NUM           : Int,
     DATA_BUFFER_SHIFT   : Int

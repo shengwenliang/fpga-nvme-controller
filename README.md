@@ -83,5 +83,6 @@ This repo provides an example benchmark design includes hardware design and corr
 To test this design:  
 1. Install [QDMA driver and LibQDMA](https://github.com/carlzhang4/qdma_improve).
 2. Generate bitstream file, and program to FPGA.
-3. Use Makefile to generate executable.
-4. Reboot your computer and run.
+3. Change list of NVMe devices in NVMeBenchmark.cpp
+4. Use Makefile to generate executable.
+5. Reboot your computer and run.

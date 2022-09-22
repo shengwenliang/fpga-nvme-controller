@@ -14,7 +14,8 @@ object elaborate extends App {
 	val dir 	= TargetDirAnnotation("Verilog")
 
 	args(0) match{
-		case "NVMeBenchmarkTop" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new NVMeBenchmarkTop()),dir))
+		case "NVMeBandwidthBenchmarkTop" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new NVMeBandwidthBenchmarkTop()),dir))
+		case "NVMeLatencyBenchmarkTop" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new NVMeLatencyBenchmarkTop()),dir))
 		case "TestAXIRouter" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new TestAXIRouter()),dir))
 		case "BandwidthProbe" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new BandwidthProbe(100, 4096)),dir))
 		case _ => println("Module match failed!")

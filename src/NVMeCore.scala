@@ -74,25 +74,27 @@ class NVMeController (
 
     val RAM_TYPE_BIT        = SSD_HIGH_BIT + 1
 
-    // SQ & CQ RAMs
+    // SQ & CQ RAMs.
+    // XRam use RAMB36 or URAM288 thus depth is 1K ~ 4K, which is too big to just hold one SSD.
+    // Therefore, in this version of implementation, All SSDs share 1 SQ RAM and 1 CQ RAM.
 
-    val sqRam   = Seq.fill(SSD_NUM)(XRam(
+    val sqRam   = XRam(
         UInt(512.W),
-        QUEUE_NUM * QUEUE_DEPTH,
+        pow(2, log2Up(SSD_NUM) + log2Up(QUEUE_NUM)).toInt * QUEUE_DEPTH,
         latency = 1,
         use_musk = 0
-    ))
+    )
 
     // SQ data structures
     val sqTail  = RegInit(VecInit(Seq.fill(SSD_NUM)(VecInit(Seq.fill(QUEUE_NUM)(0.U(ENTRY_BIT_LEN.W))))))
     val sqHead  = RegInit(VecInit(Seq.fill(SSD_NUM)(VecInit(Seq.fill(QUEUE_NUM)(0.U(ENTRY_BIT_LEN.W))))))
     
-    val cqRam   = Seq.fill(SSD_NUM)(XRam(
+    val cqRam   = XRam(
         UInt(512.W),
-        QUEUE_NUM * QUEUE_DEPTH / 4,
+        SSD_NUM * QUEUE_NUM * QUEUE_DEPTH / 4,
         latency = 1,
         use_musk = 1
-    ))
+    )
 
     // CQ data structures. CQ head can be divided into 2 parts,
     // One is phase, used to know whether CQE has been updated,
@@ -167,89 +169,126 @@ class NVMeController (
 
     val dbReq = Wire(Vec(SSD_NUM, Vec(QUEUE_NUM, Decoupled(new Doorbell))))
 
+    // Part 1: Add command from user to SQ.
+
+    // Each queue has a command FIFO.
+    val cmdInputFifo    = XQueue(SSD_NUM*QUEUE_NUM)(UInt(512.W), 16)
+    val cmdInputFifoOut = Wire(Vec(SSD_NUM*QUEUE_NUM, Decoupled(UInt(512.W))))
+
+    // Write command to command RAM. 
+    // Since all queues share one RAM, we use a reg to indicate which queue to write.
+    val sqAllocPtSsd  = RegInit(UInt(SSD_BIT_LEN.W), 0.U)
+    val sqAllocPtQp   = RegInit(UInt(QUEUE_BIT_LEN.W), 0.U)
+    val queueWriteRdy = Wire(Vec(SSD_NUM, Vec(QUEUE_NUM, Bool())))
+
     for (ssdId <- 0 until SSD_NUM) {
-
-        // Part 1: Add command from user to SQ.
-
-        // Each queue has a command FIFO.
-        val cmdInputFifo    = XQueue(QUEUE_NUM)(UInt(512.W), 64)
-        val cmdInputFifoOut = Wire(Vec(QUEUE_NUM, Decoupled(UInt(512.W))))
-
-        // Write command to command RAM. 
-        // Since all queues share one RAM, we use a reg to indicate which queue to write.
-        val sqAllocPt     = RegInit(UInt(QUEUE_BIT_LEN.W), 0.U)
-        val queueWriteRdy = Wire(Vec(QUEUE_NUM, Bool()))
-
         for (queueId <- 0 until QUEUE_NUM) {
+            val fifoId = ssdId*QUEUE_NUM+queueId
             val cmdInputFifoIn      = Wire(Decoupled(UInt(512.W)))
-            val cmdInputFifoSlice   = RegSlice(2)(cmdInputFifo(queueId).io.out)
-            cmdInputFifo(queueId).io.in     <> RegSlice(2)(cmdInputFifoIn)
+            val cmdInputFifoSlice   = RegSlice(2)(cmdInputFifo(fifoId).io.out)
+            cmdInputFifo(fifoId).io.in      <> RegSlice(2)(cmdInputFifoIn)
             io.ssdCmd(ssdId)(queueId).ready := io.control.enable && cmdInputFifoIn.ready
             cmdInputFifoIn.valid            := io.control.enable && io.ssdCmd(ssdId)(queueId).valid
             cmdInputFifoIn.bits             := io.ssdCmd(ssdId)(queueId).bits
-            cmdInputFifoOut(queueId).valid  := cmdInputFifoSlice.valid
-            cmdInputFifoOut(queueId).bits   := cmdInputFifoSlice.bits
-            cmdInputFifoSlice.ready         := cmdInputFifoOut(queueId).ready
-            cmdInputFifoOut(queueId).ready  := queueWriteRdy(queueId) && (sqAllocPt === queueId.U)
+            cmdInputFifoOut(fifoId).valid   := cmdInputFifoSlice.valid
+            cmdInputFifoOut(fifoId).bits    := cmdInputFifoSlice.bits
+            cmdInputFifoSlice.ready                         := cmdInputFifoOut(fifoId).ready
+            cmdInputFifoOut(fifoId).ready   := (queueWriteRdy(ssdId)(queueId) 
+                && (sqAllocPtQp === queueId.U) && (sqAllocPtSsd === ssdId.U))
 
             when (io.ssdCmd(ssdId)(queueId).fire) {
                 commandStart(ssdId)(queueId) := commandStart(ssdId)(queueId) + 1.U
             }
         }
+    }
 
-        when (sqAllocPt === QUEUE_MAX_ID.U) {
-            sqAllocPt := 0.U
+    val sqAllocPtFifo = RegInit(UInt((SSD_BIT_LEN + QUEUE_BIT_LEN).W), 0.U)
+
+    when (sqAllocPtQp === QUEUE_MAX_ID.U) {
+        when (sqAllocPtSsd === (SSD_NUM-1).U) {
+            sqAllocPtSsd    := 0.U
+            sqAllocPtFifo   := 0.U
         }.otherwise {
-            sqAllocPt := sqAllocPt + 1.U
+            sqAllocPtSsd    := sqAllocPtSsd + 1.U
+            sqAllocPtFifo   := sqAllocPtFifo + 1.U
         }
+        sqAllocPtQp     := 0.U
+    }.otherwise {
+        sqAllocPtQp     := sqAllocPtQp + 1.U
+        sqAllocPtFifo   := sqAllocPtFifo + 1.U
+    }
 
-        sqRam(ssdId).io.addr_a     := Cat(sqAllocPt, sqTail(ssdId)(sqAllocPt))
-        sqRam(ssdId).io.data_in_a  := cmdInputFifoOut(sqAllocPt).bits
-        sqRam(ssdId).io.wr_en_a    := cmdInputFifoOut(sqAllocPt).fire
+    if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT) { // More than 1 queue
+        sqRam.io.addr_a     := Cat(sqAllocPtSsd, sqAllocPtQp, sqTail(sqAllocPtSsd)(sqAllocPtQp))
+    } else { // Only 1 queue
+        sqRam.io.addr_a     := Cat(sqAllocPtSsd, sqTail(sqAllocPtSsd)(sqAllocPtQp))
+    }
+    
+    sqRam.io.data_in_a  := cmdInputFifoOut(sqAllocPtFifo).bits
+    sqRam.io.wr_en_a    := cmdInputFifoOut(sqAllocPtFifo).fire
 
-        // Part 2: Get to know whether CQ has been changed.
+    // Part 2: Get to know whether CQ has been changed.
 
-        val cqDetectPt  = RegInit(UInt(QUEUE_BIT_LEN.W), 0.U)
+    val cqDetectPtQp    = RegInit(UInt(QUEUE_BIT_LEN.W), 0.U)
+    val cqDetectPtSsd   = RegInit(UInt(SSD_BIT_LEN.W), 0.U)
+    val cqDetectPtAddr  = Wire(UInt((QUEUE_BIT_LEN+SSD_BIT_LEN).W))
 
-        when (cqDetectPt === QUEUE_MAX_ID.U) {
-            cqDetectPt := 0.U
+    if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT) { // More than 1 queue
+        cqDetectPtAddr  := Cat(cqDetectPtSsd, cqDetectPtQp)
+    } else {
+        cqDetectPtAddr  := cqDetectPtSsd
+    }
+
+    when (cqDetectPtQp === QUEUE_MAX_ID.U) {
+        when (cqDetectPtSsd === (SSD_NUM-1).U) {
+            cqDetectPtSsd   := 0.U
         }.otherwise {
-            cqDetectPt := cqDetectPt + 1.U
+            cqDetectPtSsd   := cqDetectPtSsd + 1.U
         }
+        cqDetectPtQp    := 0.U
+    }.otherwise {
+        cqDetectPtQp    := cqDetectPtQp + 1.U
+    }
 
-        if (ENTRY_BIT_LEN <= 4) {
-            cqRam(ssdId).io.addr_b     := cqDetectPt
-        } else {
-            cqRam(ssdId).io.addr_b     := Cat(cqDetectPt, cqHead(ssdId)(cqDetectPt)(ENTRY_BIT_LEN-1, 2))
-        }
+    if (ENTRY_BIT_LEN <= 4) {
+        cqRam.io.addr_b := cqDetectPtAddr
+    } else {
+        cqRam.io.addr_b := Cat(cqDetectPtAddr, cqHead(cqDetectPtSsd)(cqDetectPtQp)(ENTRY_BIT_LEN-1, 2))
+    }
+
+    for (ssdId <- 0 until SSD_NUM) {
         for (queueId <- 0 until QUEUE_NUM) {
             cqHeadChanged(ssdId)(queueId).valid := (
-                queueId.U(QUEUE_BIT_LEN.W) === RegNext(cqDetectPt)
+                ssdId.U(SSD_BIT_LEN.W) === RegNext(cqDetectPtSsd)
+                && queueId.U(QUEUE_BIT_LEN.W) === RegNext(cqDetectPtQp)
             )
             cqHeadChanged(ssdId)(queueId).bits := 0.U
             switch (cqHead(ssdId)(queueId)(1, 0)) {
                 is (0.U(2.W)) {
                     cqHeadChanged(ssdId)(queueId).bits := (
-                        cqRam(ssdId).io.data_out_b(112+128*0) =/= RegNext(cqPhase(ssdId)(queueId))
+                        cqRam.io.data_out_b(112+128*0) =/= RegNext(cqPhase(ssdId)(queueId))
                     )
                 }
                 is (1.U(2.W)) {
                     cqHeadChanged(ssdId)(queueId).bits := (
-                        cqRam(ssdId).io.data_out_b(112+128*1) =/= RegNext(cqPhase(ssdId)(queueId))
+                        cqRam.io.data_out_b(112+128*1) =/= RegNext(cqPhase(ssdId)(queueId))
                     )
                 }
                 is (2.U(2.W)) {
                     cqHeadChanged(ssdId)(queueId).bits := (
-                        cqRam(ssdId).io.data_out_b(112+128*2) =/= RegNext(cqPhase(ssdId)(queueId))
+                        cqRam.io.data_out_b(112+128*2) =/= RegNext(cqPhase(ssdId)(queueId))
                     )
                 }
                 is (3.U(2.W)) {
                     cqHeadChanged(ssdId)(queueId).bits := (
-                        cqRam(ssdId).io.data_out_b(112+128*3) =/= RegNext(cqPhase(ssdId)(queueId))
+                        cqRam.io.data_out_b(112+128*3) =/= RegNext(cqPhase(ssdId)(queueId))
                     )
                 }
             }
         }
+    }
+
+    for (ssdId <- 0 until SSD_NUM) {
  
         // Part 3: Queue pair handle logic.
 
@@ -339,7 +378,7 @@ class NVMeController (
             } // switch (qpSt)
 
             // New command requests
-            queueWriteRdy(queueId) := (qpSt === sQpSqWait1) || (qpSt === sQpSqWait2)
+            queueWriteRdy(ssdId)(queueId) := (qpSt === sQpSqWait1) || (qpSt === sQpSqWait2)
             
             // Doorbell requests
             dbReq(ssdId)(queueId).valid         := (qpSt === sQpSqDb) || (qpSt === sQpCqDb)
@@ -503,40 +542,86 @@ class NVMeController (
 
     // Part 5 : QDMA read/write SQ/CQ RAM.
 
-    for (ssdId <- 0 until SSD_NUM) {
+    // SQ RAM
 
-        // SQ RAM
-
+    if (SSD_HIGH_BIT >= SSD_LOW_BIT) { // More than 1 SSD
         if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT) { // More than 1 queue
-            sqRam(ssdId).io.addr_b  := Cat(
+            sqRam.io.addr_b  := Cat(
+                io.ramIO.readAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
                 io.ramIO.readAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT),
                 io.ramIO.readAddr(ENTRY_HIGH_BIT_SQ, ENTRY_LOW_BIT_SQ)
             )
         } else { // Only 1 queue.
-            sqRam(ssdId).io.addr_b  := io.ramIO.readAddr(ENTRY_HIGH_BIT_SQ, ENTRY_LOW_BIT_SQ)
-        }
-
-        // CQ RAM
-
-        if (SSD_HIGH_BIT >= SSD_LOW_BIT) { // More than 1 SSD.
-            cqRam(ssdId).io.wr_en_a := (
-                io.ramIO.writeAddr(63, RAM_TYPE_BIT+1) === 0.U
-                && io.ramIO.writeAddr(RAM_TYPE_BIT) === 1.U
-                && io.ramIO.writeAddr(SSD_HIGH_BIT, SSD_LOW_BIT) === ssdId.U
-                && io.ramIO.writeAddr(QUEUE_LOW_BIT-1, ENTRY_HIGH_BIT_CQ+1) === 0.U
-                && io.ramIO.writeMask =/= 0.U
-            )
-        } else { // Only 1 SSD.
-            cqRam(ssdId).io.wr_en_a := (
-                io.ramIO.writeAddr(63, RAM_TYPE_BIT+1) === 0.U
-                && io.ramIO.writeAddr(RAM_TYPE_BIT) === 1.U
-                && io.ramIO.writeAddr(QUEUE_LOW_BIT-1, ENTRY_HIGH_BIT_CQ+1) === 0.U
-                && io.ramIO.writeMask =/= 0.U
+            sqRam.io.addr_b  := Cat(
+                io.ramIO.readAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
+                io.ramIO.readAddr(ENTRY_HIGH_BIT_SQ, ENTRY_LOW_BIT_SQ)
             )
         }
+    } else {
+        if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT) { // More than 1 queue
+            sqRam.io.addr_b  := Cat(
+                io.ramIO.readAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT),
+                io.ramIO.readAddr(ENTRY_HIGH_BIT_SQ, ENTRY_LOW_BIT_SQ)
+            )
+        } else { // Only 1 queue.
+            sqRam.io.addr_b  := io.ramIO.readAddr(ENTRY_HIGH_BIT_SQ, ENTRY_LOW_BIT_SQ)
+        }
+    }
 
-        if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ >= 6) { // More than 1 queue and 4 entries
-            cqRam(ssdId).io.addr_a := Mux(cqRam(ssdId).io.wr_en_a,
+    // CQ RAM
+
+    cqRam.io.wr_en_a := (
+        io.ramIO.writeAddr(63, RAM_TYPE_BIT+1) === 0.U
+        && io.ramIO.writeAddr(RAM_TYPE_BIT) === 1.U
+        && io.ramIO.writeAddr(QUEUE_LOW_BIT-1, ENTRY_HIGH_BIT_CQ+1) === 0.U
+        && io.ramIO.writeMask =/= 0.U
+    )
+
+    if (SSD_HIGH_BIT >= SSD_LOW_BIT) {// >1 SSD
+        if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ >= 6) { // >1 queue, >4 entries
+            cqRam.io.addr_a := Mux(cqRam.io.wr_en_a,
+                Cat(
+                    io.ramIO.writeAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
+                    io.ramIO.writeAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT),
+                    io.ramIO.writeAddr(ENTRY_HIGH_BIT_CQ, 6)
+                ),
+                Cat(
+                    io.ramIO.readAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
+                    io.ramIO.readAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT),
+                    io.ramIO.readAddr(ENTRY_HIGH_BIT_CQ, 6)
+                ),
+            )
+        } else if (QUEUE_HIGH_BIT < QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ >= 6) { // 1 queue, >4 entries
+            cqRam.io.addr_a := Mux(cqRam.io.wr_en_a, 
+                Cat(
+                    io.ramIO.writeAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
+                    io.ramIO.writeAddr(ENTRY_HIGH_BIT_CQ, 6)
+                ),
+                Cat(
+                    io.ramIO.readAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
+                    io.ramIO.readAddr(ENTRY_HIGH_BIT_CQ, 6)
+                ),
+            )
+        } else if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ < 6) { // >1 queue, 4 entries
+            cqRam.io.addr_a := Mux(cqRam.io.wr_en_a, 
+                Cat(
+                    io.ramIO.writeAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
+                    io.ramIO.writeAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT)
+                ),
+                Cat(
+                    io.ramIO.readAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
+                    io.ramIO.readAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT)
+                )
+            )
+        } else { // 1 queue, 4 entries
+            cqRam.io.addr_a  := Mux(cqRam.io.wr_en_a, 
+                io.ramIO.writeAddr(SSD_HIGH_BIT, SSD_LOW_BIT),
+                io.ramIO.readAddr(SSD_HIGH_BIT, SSD_LOW_BIT)
+            )
+        }
+    } else { // Only 1 SSD
+        if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ >= 6) { // >1 queue, >4 entries
+            cqRam.io.addr_a := Mux(cqRam.io.wr_en_a,
                 Cat(
                     io.ramIO.writeAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT),
                     io.ramIO.writeAddr(ENTRY_HIGH_BIT_CQ, 6)
@@ -546,43 +631,32 @@ class NVMeController (
                     io.ramIO.readAddr(ENTRY_HIGH_BIT_CQ, 6)
                 ),
             )
-        } else if (QUEUE_HIGH_BIT < QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ >= 6) {
-            cqRam(ssdId).io.addr_a := Mux(cqRam(ssdId).io.wr_en_a, 
+        } else if (QUEUE_HIGH_BIT < QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ >= 6) { // 1 queue, >4 entries
+            cqRam.io.addr_a := Mux(cqRam.io.wr_en_a, 
                 io.ramIO.writeAddr(ENTRY_HIGH_BIT_CQ, 6),
                 io.ramIO.readAddr(ENTRY_HIGH_BIT_CQ, 6),
             )
-        } else if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ < 6) {
-            cqRam(ssdId).io.addr_a := Mux(cqRam(ssdId).io.wr_en_a, 
+        } else if (QUEUE_HIGH_BIT >= QUEUE_LOW_BIT && ENTRY_HIGH_BIT_CQ < 6) { // >1 queue, 4 entries
+            cqRam.io.addr_a := Mux(cqRam.io.wr_en_a, 
                 io.ramIO.writeAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT),
                 io.ramIO.readAddr(QUEUE_HIGH_BIT, QUEUE_LOW_BIT)
             )
-        } else {
-            cqRam(ssdId).io.addr_a  := 0.U
+        } else { // 1 queue, 4 entries
+            cqRam.io.addr_a  := 0.U
         }
-        cqRam(ssdId).io.musk_a.get  := io.ramIO.writeMask
-        cqRam(ssdId).io.data_in_a   := io.ramIO.writeData
     }
+    cqRam.io.musk_a.get  := io.ramIO.writeMask
+    cqRam.io.data_in_a   := io.ramIO.writeData
 
     val nextReadAddr = RegNext(io.ramIO.readAddr)
 
     io.ramIO.readData := 0.U
 
     when (nextReadAddr(63, RAM_TYPE_BIT+1) === 0.U) {
-        if (SSD_HIGH_BIT >= SSD_LOW_BIT) { // More than 1 SSD
-            for (ssdId <- 0 until SSD_NUM) {
-                when (ssdId.U === nextReadAddr(SSD_HIGH_BIT, SSD_LOW_BIT)) {
-                    io.ramIO.readData := Mux(nextReadAddr(RAM_TYPE_BIT) === 0.U,
-                        sqRam(ssdId).io.data_out_b,
-                        cqRam(ssdId).io.data_out_a
-                    )
-                }
-            }
-        } else {
-            io.ramIO.readData := Mux(nextReadAddr(RAM_TYPE_BIT) === 0.U,
-                sqRam(0).io.data_out_b,
-                cqRam(0).io.data_out_a
-            )
-        }
+        io.ramIO.readData := Mux(nextReadAddr(RAM_TYPE_BIT) === 0.U,
+            sqRam.io.data_out_b,
+            cqRam.io.data_out_a
+        )
     }
 
     // Update SQ head from CQE.
