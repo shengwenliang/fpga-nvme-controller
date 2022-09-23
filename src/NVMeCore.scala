@@ -192,7 +192,7 @@ class NVMeController (
             cmdInputFifoIn.bits             := io.ssdCmd(ssdId)(queueId).bits
             cmdInputFifoOut(fifoId).valid   := cmdInputFifoSlice.valid
             cmdInputFifoOut(fifoId).bits    := cmdInputFifoSlice.bits
-            cmdInputFifoSlice.ready                         := cmdInputFifoOut(fifoId).ready
+            cmdInputFifoSlice.ready         := cmdInputFifoOut(fifoId).ready
             cmdInputFifoOut(fifoId).ready   := (queueWriteRdy(ssdId)(queueId) 
                 && (sqAllocPtQp === queueId.U) && (sqAllocPtSsd === ssdId.U))
 
@@ -308,7 +308,7 @@ class NVMeController (
 
             switch (qpSt) {
                 is (sQpSqWait1) { // Wait for new command
-                    when (cmdInputFifoOut(queueId).fire) { // A new command comes.
+                    when (cmdInputFifoOut(ssdId*QUEUE_NUM+queueId).fire) { // A new command comes.
                         qpSt := sQpSqIns
                     }.otherwise {
                         qpSt := sQpSqWait1
@@ -323,7 +323,7 @@ class NVMeController (
                     }
                 }
                 is (sQpSqWait2) { // Wait for more command to reduce doorbell signals
-                    when (cmdInputFifoOut(queueId).fire) { // A new command comes.
+                    when (cmdInputFifoOut(ssdId*QUEUE_NUM+queueId).fire) { // A new command comes.
                         qpSt := sQpSqIns
                     }.elsewhen (sqWaitCnt >= MAX_SQ_INTERVAL.U) { // No command comes for a while, ring doorbell.
                         qpSt := sQpSqDb

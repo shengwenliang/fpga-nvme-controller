@@ -15,7 +15,7 @@ class NVMeLatencyBenchmarkTop extends RawModule{
 
 	// Global parameters
 	val DATA_BUFFER_SHIFT	= 27 // Upper 128 MiB is used for data buffer.
-	val SSD_NUM				= 8
+	val SSD_NUM				= 4
 	val QUEUE_DEPTH			= 64
 	val QDMA_INTERFACE		= "SAXIB"
 
@@ -172,13 +172,5 @@ class NVMeLatencyBenchmarkTop extends RawModule{
 		}.otherwise {
 			diff_time := diff_time + 1.U
 		}
-
-		// Debug
-
-		class ila_debug(seq:Seq[Data]) extends BaseILA(seq)
-		val instIlaDbg = Module(new ila_debug(Seq(
-			qdma.io.axib
-		)))
-		instIlaDbg.connect(qdma.io.user_clk)
 	}
 }

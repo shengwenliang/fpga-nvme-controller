@@ -74,7 +74,7 @@ class NVMeLatencyBenchmark (
     val gblTimer = RegInit(UInt(64.W), 0.U)
     gblTimer    := gblTimer + 1.U(64.W)
 
-    val startTimeRam = XRam(SSD_NUM)(UInt(64.W), 256, latency=1)
+    val startTimeRam = XRam(SSD_NUM)(UInt(64.W), 256, latency=2)
 
     // Generate commands
 
@@ -172,21 +172,23 @@ class NVMeLatencyBenchmark (
             cmptId := ssdId.U
         }
     }
-    
-    val cmdLatency = Wire(UInt(64.W))
-    cmdLatency := 0.U
+
+    val latencyBits = Wire(UInt(64.W))
+    latencyBits := 0.U
     for (ssdId <- 0 until SSD_NUM) {
-        when (cmptId === ssdId.U) {
-            cmdLatency := gblTimer - startTimeRam(ssdId).io.data_out_b
+        when (RegNext(RegNext(cmptId)) === ssdId.U) {
+            latencyBits := gblTimer - startTimeRam(ssdId).io.data_out_b
         }
     }
 
     // Latency RAM. 
 
-    val latencyRam = XRam(UInt(32.W), 8192, latency=1, memory_type="ultra")
-    latencyRam.io.addr_a    := Mux(io.ctlRunning, RegNext(latencyRam.io.addr_b) ,io.ctlReadLatency.bits)
-    latencyRam.io.wr_en_a   := io.ctlRunning && RegNext(RegNext(io.ssdCmpt(cmptId).valid))
-    latencyRam.io.addr_b    := Mux(cmdLatency(63, 16) === 0.U, cmdLatency(15, 3), -1.S(13.W).asUInt)
+    val latencyValid = RegNext(RegNext(io.ssdCmpt(cmptId).valid))
+
+    val latencyRam = XRam(UInt(32.W), 8192, latency=2, memory_type="ultra")
+    latencyRam.io.addr_a    := Mux(io.ctlRunning, RegNext(RegNext(latencyRam.io.addr_b)) ,io.ctlReadLatency.bits)
+    latencyRam.io.wr_en_a   := io.ctlRunning && RegNext(RegNext(latencyValid))
+    latencyRam.io.addr_b    := Mux(latencyBits(63, 16) === 0.U, latencyBits(15, 3), -1.S(13.W).asUInt)
     latencyRam.io.data_in_a := latencyRam.io.data_out_b + 1.U
     io.statLatency          := latencyRam.io.data_out_a
 
