@@ -187,7 +187,7 @@ class NVMeLatencyBenchmark (
 
     val latencyRam = XRam(UInt(32.W), 8192, latency=2, memory_type="ultra")
     latencyRam.io.addr_a    := Mux(io.ctlRunning, RegNext(RegNext(latencyRam.io.addr_b)) ,io.ctlReadLatency.bits)
-    latencyRam.io.wr_en_a   := io.ctlRunning && RegNext(RegNext(latencyValid))
+    latencyRam.io.wr_en_a   := io.ctlRunning && latencyValid
     latencyRam.io.addr_b    := Mux(latencyBits(63, 16) === 0.U, latencyBits(15, 3), -1.S(13.W).asUInt)
     latencyRam.io.data_in_a := latencyRam.io.data_out_b + 1.U
     io.statLatency          := latencyRam.io.data_out_a

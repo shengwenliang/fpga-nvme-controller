@@ -18,6 +18,7 @@ object elaborate extends App {
 		case "NVMeLatencyBenchmarkTop" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new NVMeLatencyBenchmarkTop()),dir))
 		case "TestAXIRouter" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new TestAXIRouter()),dir))
 		case "BandwidthProbe" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new BandwidthProbe(100, 4096)),dir))
+		case "LatencyBucket" => stage.execute(arr,Seq(ChiselGeneratorAnnotation(() => new LatencyBucket(32, 1)),dir))
 		case _ => println("Module match failed!")
 	}
 }
